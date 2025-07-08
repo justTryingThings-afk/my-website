@@ -1,26 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
-
-// Your Firebase project configuration
-// IMPORTANT: PASTE YOUR ACTUAL FIREBASE CONFIG HERE from the Firebase Console
-const firebaseConfig = {
-  apiKey: "AIzaSyBHJ-xuP-SRCVGQqjmovLdZh33upZCU_l4",
-  authDomain: "my-project-cc0d2.firebaseapp.com",
-  projectId: "my-project-cc0d2",
-  storageBucket: "my-project-cc0d2.firebasestorage.app",
-  messagingSenderId: "671536812277",
-  appId: "1:671536812277:web:45e538ba8d5e21240075bc",
-  measurementId: "G-8SZQ1MBVGR"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 
 // Main App component for the website
 const App = () => {
   // State to manage which page is currently displayed
+  // 'initial', 'initialOptions', 'wiseChoice', 'thirdPage', 'fulfillmentDate', 'dealEvaluation'
   const [currentPage, setCurrentPage] = useState('initial');
   // State for the 'No' button's position (x, y coordinates)
   const [noButtonPos, setNoButtonPos] = useState({ x: 0, y: 0 });
@@ -36,8 +19,11 @@ const App = () => {
   const [showGoodDealPage, setShowGoodDealPage] = useState(false);
   // State for displaying validation messages
   const [validationMessage, setValidationMessage] = useState('');
-  // State for displaying data submission status
-  const [submissionStatus, setSubmissionStatus] = useState('');
+  // State for displaying email sending status
+  const [emailStatus, setEmailStatus] = useState('');
+
+  // IMPORTANT: Replace this with your actual email address
+  const yourEmailAddress = 'sandeep2682006@gmail.com';
 
   // Function to handle the click on the 'Yes' button
   const handleYesClick = () => {
@@ -61,9 +47,9 @@ const App = () => {
   };
 
   // Function to handle the click on the 'Next' button on the 'Fulfillment Date' page
-  const handleNextClickFromFulfillmentDate = async () => { // Made async to await Firestore call
+  const handleNextClickFromFulfillmentDate = () => {
     if (selectedFulfillmentDate === '') {
-      setValidationMessage('Please select a date madam ji');
+      setValidationMessage('Please select a date madam ji'); // Updated validation message
       return; // Stop execution if field is empty
     }
     setValidationMessage(''); // Clear message if valid
@@ -74,27 +60,57 @@ const App = () => {
     } else {
       setShowGoodDealPage(false);
     }
-
-    setSubmissionStatus('Submitting deal...'); // Show submission status
-    try {
-      // Save data to Firestore
-      await addDoc(collection(db, "proposals"), {
-        dealProposal: dealProposal,
-        fulfillmentDate: selectedFulfillmentDate,
-        timestamp: new Date(), // Add a timestamp
-      });
-      setSubmissionStatus('Deal submitted successfully!');
-      console.log("Deal submitted to Firestore!");
-    } catch (e) {
-      console.error("Error adding document: ", e);
-      setSubmissionStatus('Failed to submit deal. Please try again.');
-    } finally {
-      // Transition to the deal evaluation page after submission attempt
-      setCurrentPage('dealEvaluation');
-      // Clear status message after a few seconds
-      setTimeout(() => setSubmissionStatus(''), 5000);
-    }
+    setCurrentPage('dealEvaluation'); // Transition to the new final page
   };
+
+  // Effect to handle email sending when the dealEvaluation page is reached
+  useEffect(() => {
+    if (currentPage === 'dealEvaluation') {
+      setEmailStatus('Sending email...');
+      const emailData = {
+        to: yourEmailAddress,
+        subject: 'New Deal Proposal from Your Girlfriend!',
+        body: `
+          Your girlfriend has submitted a new deal proposal!
+
+          Proposed Deal:
+          "${dealProposal}"
+
+          Fulfillment Date:
+          ${selectedFulfillmentDate}
+
+          Please review and revert back with an answer.
+        `,
+      };
+
+      // Simulate API call to your backend for sending email
+      // IMPORTANT: This 'fetch' call will only work if you have a backend server
+      // listening at '/api/send-email' that handles actual email sending.
+      // This is a placeholder for demonstration purposes.
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+      })
+        .then(response => {
+          if (response.ok) {
+            setEmailStatus('Email sent successfully!');
+          } else {
+            setEmailStatus('Failed to send email. (Check your backend setup)');
+          }
+        })
+        .catch(error => {
+          console.error('Error sending email:', error);
+          setEmailStatus('Failed to send email. (Network error or backend issue)');
+        })
+        .finally(() => {
+          // Clear the status message after a few seconds
+          setTimeout(() => setEmailStatus(''), 5000);
+        });
+    }
+  }, [currentPage, dealProposal, selectedFulfillmentDate, yourEmailAddress]); // Dependencies for useEffect
 
   // Function to calculate and set a new random position for the 'No' button
   const setRandomNoButtonPos = useCallback(() => {
@@ -103,20 +119,24 @@ const App = () => {
       const noButtonRect = noButtonRef.current.getBoundingClientRect();
 
       // Calculate random positions within the container bounds
+      // Ensure the button is fully visible and doesn't go out of bounds
       const newX = Math.random() * (containerRect.width - noButtonRect.width);
       const newY = Math.random() * (containerRect.height - noButtonRect.height);
       setNoButtonPos({ x: newX, y: newY });
     }
   }, []);
 
-  // Effect to set initial random position for the 'No' button and handle page transition
+  // Effect to set initial random position for the 'No' button when it becomes visible
+  // and to handle the initial page transition
   useEffect(() => {
     if (currentPage === 'initial') {
+      // After 2 seconds, transition to the page with options
       const timer = setTimeout(() => {
         setCurrentPage('initialOptions');
-      }, 2000);
-      return () => clearTimeout(timer);
+      }, 2000); // 2-second delay
+      return () => clearTimeout(timer); // Cleanup the timer
     } else if (currentPage === 'initialOptions') {
+      // Set random position for 'No' button when initialOptions page loads
       setRandomNoButtonPos();
     }
   }, [currentPage, setRandomNoButtonPos]);
@@ -137,18 +157,19 @@ const App = () => {
         Math.pow(mouseX - noButtonCenterX, 2) + Math.pow(mouseY - noButtonCenterY, 2)
       );
 
-      const evasionRadius = 100;
+      const evasionRadius = 100; // Radius within which the button will evade
 
       if (distance < evasionRadius) {
         let newX = noButtonPos.x;
         let newY = noButtonPos.y;
 
         const angle = Math.atan2(noButtonCenterY - mouseY, noButtonCenterX - mouseX);
-        const moveDistance = 20;
+        const moveDistance = 20; // How far to move each time
 
         newX += Math.cos(angle) * moveDistance;
         newY += Math.sin(angle) * moveDistance;
 
+        // Ensure button stays within container bounds
         newX = Math.max(0, Math.min(newX, containerRect.width - noButtonRect.width));
         newY = Math.max(0, Math.min(newY, containerRect.height - noButtonRect.height));
 
@@ -159,8 +180,8 @@ const App = () => {
 
   // --- Touch Evasion Logic (for mobile) ---
   const handleNoButtonTouch = (e) => {
-    e.preventDefault();
-    setRandomNoButtonPos();
+    e.preventDefault(); // Prevent default touch behavior (e.g., scrolling)
+    setRandomNoButtonPos(); // Jump to a new random position on touch
   };
 
   // --- Date Calculation for Fulfillment Date Page ---
@@ -179,25 +200,31 @@ const App = () => {
   const maxDate = getFormattedDate(tomorrow);
 
   return (
+    // Main container for the application, centered and full height/width
+    // onMouseMove for desktop, touch events handled directly on the button
     <div
       ref={containerRef}
       className="min-h-screen relative flex flex-col items-center justify-center bg-gradient-to-br from-pink-200 to-purple-300 p-4 font-inter overflow-hidden"
-      onMouseMove={handleMouseMove}
+      onMouseMove={handleMouseMove} // For mouse evasion on desktop
     >
       {currentPage === 'initial' && (
+        // First page: Only text, then animates to initialOptions
         <div className="flex flex-col items-center justify-center text-center z-10 p-4 animate-fade-in">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-white text-shadow-lg mb-6 leading-tight">
             Would you like to apologize to yours truly?
           </h1>
+          {/* Mazak text is now ONLY on the initialOptions page */}
         </div>
       )}
 
       {currentPage === 'initialOptions' && (
+        // Intermediate page: "Soch lo" with Yes/No buttons and mazak
         <>
           <div className="flex flex-col items-center justify-center text-center z-10 p-4 animate-fade-in">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-white text-shadow-lg mb-10 leading-tight">
               Soch lo, you might get "it" back
             </h1>
+            {/* Yes button: Centered and prominent */}
             <button
               onClick={handleYesClick}
               className="bg-white text-pink-600 font-bold py-4 px-10 rounded-full shadow-2xl transition-all duration-500 transform hover:scale-110 active:scale-95 flex items-center justify-center space-x-3 text-lg md:text-xl animate-bounce-in"
@@ -205,11 +232,13 @@ const App = () => {
               <span>Yes</span>
               <span role="img" aria-label="heart">❤️</span>
             </button>
+            {/* "mazak" text now appears here, bigger */}
             <p className="text-white text-2xl md:text-3xl mt-4 opacity-80 animate-pulse font-bold">
               (mazak)
             </p>
           </div>
 
+          {/* No button: Actively evades the cursor (mouse) or jumps on touch (mobile) */}
           <button
             ref={noButtonRef}
             onTouchStart={handleNoButtonTouch}
@@ -226,10 +255,12 @@ const App = () => {
       )}
 
       {currentPage === 'wiseChoice' && (
+        // Second page content: Wise choice message, image, and Next button
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full text-center transform transition-all duration-500 hover:scale-105 animate-fade-in">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 leading-tight">
             Wise choice
           </h1>
+          {/* Image with fallback in case the URL fails */}
           <img
             src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQBSwgxzmPsbxhBOULn4skQpSSfKnrab4fGmQ&s"
             alt="A cute illustration of a happy couple or a heart"
@@ -239,6 +270,7 @@ const App = () => {
               e.target.src = "https://placehold.co/400x250/FFC0CB/FFFFFF?text=Love";
             }}
           />
+          {/* Next button - now with onClick handler to go to the third page */}
           <button
             onClick={handleNextClickFromWiseChoice}
             className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 w-full animate-bounce-in"
@@ -249,6 +281,7 @@ const App = () => {
       )}
 
       {currentPage === 'thirdPage' && (
+        // Third page content: What will I get??? with text input
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full text-center transform transition-all duration-500 hover:scale-105 animate-fade-in">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 leading-tight">
             What will I get???
@@ -260,7 +293,7 @@ const App = () => {
             value={dealProposal}
             onChange={(e) => {
               setDealProposal(e.target.value);
-              setValidationMessage('');
+              setValidationMessage(''); // Clear message when typing
             }}
           ></textarea>
           {validationMessage && (
@@ -279,6 +312,7 @@ const App = () => {
       )}
 
       {currentPage === 'fulfillmentDate' && (
+        // Fourth page content: When will this deal be fulfilled? with date selector
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full text-center transform transition-all duration-500 hover:scale-105 animate-fade-in">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 leading-tight">
             When will this deal be fulfilled?
@@ -289,10 +323,10 @@ const App = () => {
             value={selectedFulfillmentDate}
             onChange={(e) => {
               setSelectedFulfillmentDate(e.target.value);
-              setValidationMessage('');
+              setValidationMessage(''); // Clear message when selecting
             }}
-            min={minDate}
-            max={maxDate}
+            min={minDate} // Restrict minimum date to today
+            max={maxDate} // Restrict maximum date to tomorrow
           />
           {validationMessage && (
             <p className="text-red-500 text-sm mb-2 animate-pulse">{validationMessage}</p>
@@ -307,6 +341,7 @@ const App = () => {
       )}
 
       {currentPage === 'dealEvaluation' && (
+        // Fifth page content: Deal processing based on proposal length
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full text-center transform transition-all duration-500 hover:scale-105 animate-fade-in">
           {showGoodDealPage ? (
             <>
@@ -340,9 +375,9 @@ const App = () => {
               />
             </>
           )}
-          {submissionStatus && ( // Display submission status here
-            <p className={`text-sm mt-4 ${submissionStatus.includes('successfully') ? 'text-green-600' : 'text-red-500'}`}>
-              {submissionStatus}
+          {emailStatus && (
+            <p className={`text-sm mt-4 ${emailStatus.includes('successfully') ? 'text-green-600' : 'text-red-500'}`}>
+              {emailStatus}
             </p>
           )}
         </div>
